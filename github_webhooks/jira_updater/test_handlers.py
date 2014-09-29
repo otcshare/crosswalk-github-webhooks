@@ -12,16 +12,17 @@ from django.test.utils import override_settings
 
 from github_webhooks.test.utils import GitHubEventClient
 from github_webhooks.test.utils import mock_pull_request_payload
-from jira_updater.handlers import JiraHelper
-from jira_updater.handlers import handle_pull_request
-from jira_updater.handlers import search_issues
+
+from github_webhooks.jira_updater.handlers import JiraHelper
+from github_webhooks.jira_updater.handlers import update_jira
+from github_webhooks.jira_updater.handlers import search_issues
 
 
 class JiraUpdaterTestCase(TestCase):
     def setUp(self):
         settings.JIRA_PROJECT = 'PROJ'
 
-    @patch('jira_updater.jirahelper.JIRA')
+    @patch('github_webhooks.jira_updater.jirahelper.JIRA')
     def test_non_ascii_pr_title(self, jira_mock):
         helper = JiraHelper()
 
@@ -89,19 +90,19 @@ class JiraUpdaterTestCase(TestCase):
                               [{'id': 'PROJ-123', 'resolve': False},
                                {'id': 'PROJ-456', 'resolve': True}])
 
-    @patch('jira_updater.jirahelper.JIRA')
+    @patch('github_webhooks.jira_updater.jirahelper.JIRA')
     def test_no_issue(self, jira_mock):
         payload = mock_pull_request_payload()
 
         payload['pull_request']['body'] = 'This PR does not fix any issue'
-        handle_pull_request(None, payload=payload)
+        update_jira(payload)
         self.assertEqual(jira_mock.called, False)
 
         payload['pull_request']['body'] = None
-        handle_pull_request(None, payload=payload)
+        update_jira(payload)
         self.assertEqual(jira_mock.called, False)
 
-    @patch('jira_updater.jirahelper.JIRA')
+    @patch('github_webhooks.jira_updater.jirahelper.JIRA')
     def test_comment_issue(self, jira_mock):
         payload = mock_pull_request_payload()
         payload['pull_request']['body'] = \
@@ -109,11 +110,11 @@ class JiraUpdaterTestCase(TestCase):
             'mentioned below:'\
             '\n'\
             'BUG=https://crosswalk-project.org/jira/bug=PROJ-2'
-        handle_pull_request(None, payload=payload)
+        update_jira(payload)
         jira_mock.return_value.add_comment.assert_called_with('PROJ-2', ANY)
 
     @override_settings(JIRA_TRANSITION_RESOLVE_NAME='Resolve')
-    @patch('jira_updater.jirahelper.JIRA')
+    @patch('github_webhooks.jira_updater.jirahelper.JIRA')
     def test_resolve_issue(self, jira_mock):
         payload = mock_pull_request_payload()
         payload['action'] = 'closed'
@@ -130,7 +131,7 @@ class JiraUpdaterTestCase(TestCase):
             {'id': '1', 'name': 'Triage'},
             {'id': '2', 'name': 'Resolve'},
         )
-        handle_pull_request(None, payload=payload)
+        update_jira(payload)
         jira_mock.return_value.issue.assert_called_with('PROJ-2')
         jira_mock.return_value.add_comment.assert_called_with('PROJ-2', ANY)
         jira_mock.return_value.transition_issue.assert_called_with(
@@ -146,7 +147,7 @@ class JiraUpdaterTestCase(TestCase):
             {'id': '2', 'name': 'Close'},
             {'id': '5', 'name': 'New'},
         )
-        handle_pull_request(None, payload=payload)
+        update_jira(payload)
         self.assertTrue(jira_mock.return_value.transitions.call_count, 1)
         self.assertTrue(jira_mock.return_value.add_comment.call_count, 0)
         self.assertTrue(jira_mock.return_value.transition_issue.call_count, 0)
