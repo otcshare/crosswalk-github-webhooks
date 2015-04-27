@@ -3,8 +3,7 @@
 # found in the LICENSE file.
 
 """
-Responds to the "pull_request_changed" event signal and updates JIRA
-based on the PR description.
+Updates known Jira issues based on the comments in a Pull Request's payload.
 
 If the PR was opened, its body is scanned for references to JIRA issue
 ids or URLs. For each one that is mentioned, a comment is added to the issue
@@ -25,10 +24,7 @@ import logging
 import re
 
 from django.conf import settings
-from django.dispatch import receiver
 from jirahelper import JiraHelper
-
-from github_webhooks.signals import pull_request_changed
 
 
 def search_issues(pr_body):
@@ -52,9 +48,7 @@ def search_issues(pr_body):
     return flattened_issues
 
 
-@receiver(pull_request_changed)
-def handle_pull_request(sender, **kwargs):
-    payload = kwargs['payload']
+def update_jira(payload):
     pr_body = payload['pull_request']['body']
     pr_action = payload['action']
 

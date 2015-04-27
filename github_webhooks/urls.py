@@ -7,6 +7,7 @@ from django.conf.urls import patterns, include, url
 
 urlpatterns = patterns('github_webhooks.views',
     url(r'^github-hooks/pull-request$', 'dispatch_pull_request'),
+    url(r'^github-hooks/pull-request/jira$', 'handle_jira_hook'),
 )
 
 urlpatterns += patterns('',

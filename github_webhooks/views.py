@@ -11,6 +11,7 @@ from django.http import HttpResponse, HttpResponseNotFound
 from django.views.decorators.http import require_POST
 
 from github_webhooks.signals import pull_request_changed
+from github_webhooks.jira_updater.handlers import update_jira
 
 
 # TODO(rakuco): This could be a middleware.
@@ -28,22 +29,52 @@ def is_valid_github_request(request):
     return github_signature == computed_signature
 
 
+def get_payload(request):
+    """
+    Returns the request's payload, skipping Github's test payloads
+    """
+    payload = json.loads(request.POST['payload'])
+
+    # This is a test payload GitHub sends when we add a new hook.
+     if 'zen' in payload:
+        return None
+
+    return payload
+
+
 @require_POST
 def dispatch_pull_request(request):
     """
     Receives a GitHub pull_request event triggered via a web hook and
-    dispatches a signal with the request for interested handlers.
+    dispatches a signal with the request for interested handlers. Updates
+    Jira based on the PR description.
     """
     if not is_valid_github_request(request):
         return HttpResponseNotFound()
 
-    payload = json.loads(request.POST['payload'])
+    payload = get_payload(request)
 
-    # This is a test payload GitHub sends when we add a new hook.
-    # It does not contain the payload we expect, so just ignore it.
-    if 'zen' in payload:
-        return HttpResponse()
+    if payload:
+        pull_request_changed.send(sender=None, payload=payload)
+        update_jira(payload)
 
-    pull_request_changed.send(sender=None, payload=payload)
+    return HttpResponse()
+
+
+@require_POST
+def handle_jira_hook(request):
+    """
+    Receives a GitHub pull_request event triggered via a web hook and
+    updates Jira if a known issue is referenced in the PR description.
+    This is used for those projects that want to update Jira but don't use
+    the trybot.
+    """
+    if not is_valid_github_request(request):
+        return HttpResponseNotFound()
+
+    payload = get_payload(request)
+
+    if payload:
+        update_jira(payload)
 
     return HttpResponse()
